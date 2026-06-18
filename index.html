@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#16213e">
+<title>Visor Zonas Inundables</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; }
+body { font-family: 'Segoe UI', Arial, sans-serif; display:flex; height:100vh; background:#1a1a2e; color:#e0e0e0; }
+
+#sidebar {
+    width: 370px; min-width: 370px; background: #16213e; display: flex; flex-direction: column;
+    border-right: 2px solid #0f3460; overflow-y: auto;
+}
+#sidebar-header {
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid #0f3460; background: #FDD835; flex-shrink:0;
+}
+#sidebar-header img { height: 40px; }
+#sidebar-header h2 { font-size: 12px; color: #1a1a2e; line-height: 1.3; margin:0; }
+
+.tab-bar { display:flex; border-bottom:1px solid #0f3460; flex-shrink:0; flex-wrap:wrap; }
+.tab-btn {
+    flex:1; padding:9px 4px; text-align:center; cursor:pointer; background:#1a1a2e;
+    color:#8892b0; border:none; font-size:12px; transition:all .2s; min-width:0;
+}
+.tab-btn.active { background:#0f3460; color:#00d4ff; font-weight:600; }
+
+.tab-content { display:none; padding:12px 14px; flex-shrink:0; }
+.tab-content.active { display:block; }
+
+label { display:block; font-size:12px; color:#8892b0; margin:6px 0 2px; }
+label:first-child { margin-top:0; }
+input, select {
+    width:100%; padding:7px 9px; border:1px solid #0f3460; border-radius:4px;
+    background:#1a1a2e; color:#e0e0e0; font-size:13px;
+}
+input:focus, select:focus { outline:none; border-color:#00d4ff; }
+
+.row { display:flex; gap:8px; }
+.row > div { flex:1; }
+
+button.action {
+    width:100%; padding:10px; margin-top:10px; border:none; border-radius:5px;
+    background:linear-gradient(135deg, #0f3460, #00d4ff); color:#fff;
+    font-size:13px; font-weight:600; cursor:pointer;
+}
+button.action:disabled { opacity:.4; cursor:not-allowed; }
+
+#result-box {
+    margin:8px 14px; padding:10px; border-radius:5px; font-size:12px;
+    background:#1a1a2e; border:1px solid #0f3460; flex:1; overflow-y:auto;
+    white-space:pre-wrap; line-height:1.5; min-height:60px;
+}
+.result-si { color:#ff6b6b; font-weight:700; }
+.result-no { color:#51cf66; font-weight:700; }
+.result-info { color:#8892b0; }
+
+.download-bar { padding:8px 14px; display:flex; gap:8px; border-top:1px solid #0f3460; flex-shrink:0; }
+.dl-btn {
+    flex:1; padding:7px; border:1px solid #0f3460; border-radius:4px; background:transparent;
+    color:#00d4ff; font-size:11px; cursor:pointer;
+}
+.dl-btn:disabled { opacity:.3; cursor:not-allowed; }
+
+#map { flex:1; }
+
+.autocomplete-wrapper { position:relative; }
+.autocomplete-list {
+    position:absolute; left:0; right:0; top:100%; z-index:10;
+    background:#1a1a2e; border:1px solid #0f3460; border-top:none;
+    max-height:180px; overflow-y:auto; border-radius:0 0 4px 4px;
+}
+.autocomplete-list div { padding:7px 10px; font-size:12px; cursor:pointer; border-bottom:1px solid #0f3460; }
+.autocomplete-list div:hover { background:#0f3460; color:#00d4ff; }
+
+.info-click {
+    position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:1000;
+    background:rgba(22,33,62,.9); color:#00d4ff; padding:6px 14px; border-radius:4px;
+    font-size:12px; pointer-events:none;
+}
+
+/* ---------- MOBILE ---------- */
+@media (max-width: 768px) {
+    body { flex-direction:column; }
+    #sidebar {
+        width:100%; min-width:unset; order:2;
+        height:45vh; min-height:200px;
+        border-right:none; border-top:2px solid #0f3460;
+    }
+    #map { order:1; height:55vh; width:100%; }
+    #sidebar-header img { height:30px; }
+    #sidebar-header h2 { font-size:11px; }
+    .tab-btn { font-size:11px; padding:8px 2px; }
+    .info-click { font-size:11px; top:6px; }
+    #result-box { font-size:11px; margin:6px 10px; padding:8px; }
+    .tab-content { padding:10px 12px; }
+    .download-bar { padding:6px 10px; }
+}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div id="sidebar-header">
+        <img src="https://www.miteco.gob.es/content/experience-fragments/miteco/language-masters/es/site/header/master-es/_jcr_content/root/header_container/logoImage.coreimg.svg/1764659487766/header-logo.svg" alt="MITECO">
+        <h2>Visor de Zonas Inundables<br><small style="font-weight:400;color:#333;">T=10, T=100, T=500</small></h2>
+    </div>
+
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('coords')">Coordenadas</button>
+        <button class="tab-btn" onclick="switchTab('refcat')">Ref. Catastral</button>
+        <button class="tab-btn" onclick="switchTab('geolocate')">Ubicaci&oacute;n</button>
+        <button class="tab-btn" onclick="switchTab('address')">Direcci&oacute;n</button>
+    </div>
+
+    <div id="tab-coords" class="tab-content active">
+        <label>Sistema de referencia</label>
+        <select id="crs-select" onchange="updateLabels()">
+            <option value="4326">EPSG:4326 (Lon / Lat)</option>
+            <option value="25830">EPSG:25830 (UTM 30N)</option>
+        </select>
+        <div class="row">
+            <div><label id="lbl-x">Longitud (X)</label><input id="inp-x" type="text" placeholder="-3.7037"></div>
+            <div><label id="lbl-y">Latitud (Y)</label><input id="inp-y" type="text" placeholder="40.4168"></div>
+        </div>
+        <button class="action" id="btn-coords" onclick="searchByCoords()">Buscar</button>
+    </div>
+
+    <div id="tab-refcat" class="tab-content">
+        <label>Referencia catastral</label>
+        <input id="inp-refcat" type="text" placeholder="9872023VH5797S" maxlength="20" style="text-transform:uppercase;">
+        <button class="action" id="btn-refcat" onclick="searchByRefcat()">Buscar</button>
+    </div>
+
+    <div id="tab-geolocate" class="tab-content">
+        <p style="font-size:13px;color:#8892b0;margin-bottom:8px;">Obtenga su ubicaci&oacute;n y compruebe si est&aacute; en zona inundable.</p>
+        <button class="action" id="btn-geolocate" onclick="searchByGeolocation()">&#9737; Usar mi ubicaci&oacute;n</button>
+    </div>
+
+    <div id="tab-address" class="tab-content">
+        <label>Direcci&oacute;n postal</label>
+        <div class="autocomplete-wrapper">
+            <input id="inp-address" type="text" placeholder="Calle Mayor 1, Madrid" autocomplete="off">
+            <div id="address-suggestions" class="autocomplete-list" style="display:none;"></div>
+        </div>
+        <button class="action" id="btn-address" onclick="searchByAddress()">Buscar</button>
+    </div>
+
+    <div id="result-box"><span class="result-info">Haga click en el mapa o use el panel para consultar.</span></div>
+
+    <div class="download-bar">
+        <button class="dl-btn" id="dl-zi" disabled onclick="downloadZI()">Descargar Z.I.</button>
+        <button class="dl-btn" id="dl-parcel" disabled onclick="downloadParcel()">Descargar Parcela</button>
+    </div>
+</div>
+
+<div id="map">
+    <div class="info-click" id="info-click">Click en el mapa para consultar un punto</div>
+</div>
+
+<script>
+// --- PWA Service Worker ---
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+
+// --- Proj4 ---
+proj4.defs("EPSG:25830", "+proj=utm +zone=30 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+
+// --- Constants ---
+const OGC_BASE = "https://wmts.mapama.gob.es/sig-api/ogc/features/v1/collections";
+const FLOOD_LAYERS = [
+    { id: "agua:Zi_laminas_q500", label: "T=500", color: "#64B5F6", fillOpacity: 0.20 },
+    { id: "agua:Zi_laminas_q100", label: "T=100", color: "#1976D2", fillOpacity: 0.30 },
+    { id: "agua:Zi_laminas_q10",  label: "T=10",  color: "#0D47A1", fillOpacity: 0.40 },
+];
+const CATASTRO_WFS = "https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx";
+const CARTOCIUDAD_CANDIDATES = "https://www.cartociudad.es/geocoder/api/geocoder/candidatesJsonp";
+const CARTOCIUDAD_FIND = "https://www.cartociudad.es/geocoder/api/geocoder/findJsonp";
+const BUFFER = 0.005;
+const PAGE_LIMIT = 1000;
+
+// --- Map ---
+const map = L.map("map").setView([40.0, -3.5], 6);
+const pnoa = L.tileLayer("https://www.ign.es/wmts/pnoa-ma?layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&format=image/jpeg&TileMatrix={z}&TileRow={y}&TileCol={x}", { attribution:"PNOA &copy; IGN", maxZoom:19 });
+const ignBase = L.tileLayer.wms("https://www.ign.es/wms-inspire/ign-base?", { layers:"IGNBaseTodo", format:"image/png", transparent:false, attribution:"&copy; IGN" });
+const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution:"&copy; OSM" });
+pnoa.addTo(map);
+L.control.layers({"PNOA":pnoa,"IGN Base":ignBase,"OpenStreetMap":osm}).addTo(map);
+
+let marker=null, floodLayers=[], parcelLayer=null, lastFloodGeoJSON=null, lastParcelGeoJSON=null;
+const parcelStyle={color:"#ff1744",weight:3,fillColor:"#ff1744",fillOpacity:0.15};
+
+// --- Tabs ---
+const TAB_IDS=["coords","refcat","geolocate","address"];
+function switchTab(id){ document.querySelectorAll(".tab-btn").forEach((b,i)=>b.classList.toggle("active",TAB_IDS[i]===id)); TAB_IDS.forEach(t=>document.getElementById("tab-"+t).classList.toggle("active",t===id)); }
+function updateLabels(){ const u=document.getElementById("crs-select").value==="25830"; document.getElementById("lbl-x").textContent=u?"X (Este)":"Longitud (X)"; document.getElementById("lbl-y").textContent=u?"Y (Norte)":"Latitud (Y)"; document.getElementById("inp-x").placeholder=u?"440000":"-3.7037"; document.getElementById("inp-y").placeholder=u?"4475000":"40.4168"; }
+
+// --- Helpers ---
+function setResult(h){document.getElementById("result-box").innerHTML=h;}
+function addResult(h){document.getElementById("result-box").innerHTML+=h;}
+function clearLayers(){ floodLayers.forEach(l=>map.removeLayer(l)); floodLayers=[]; if(parcelLayer){map.removeLayer(parcelLayer);parcelLayer=null;} if(marker){map.removeLayer(marker);marker=null;} lastFloodGeoJSON=null;lastParcelGeoJSON=null; document.getElementById("dl-zi").disabled=true;document.getElementById("dl-parcel").disabled=true; }
+function setLoading(v){ ["btn-coords","btn-refcat","btn-address","btn-geolocate"].forEach(id=>document.getElementById(id).disabled=v); }
+
+// --- OGC API ---
+async function queryOneLayer(layerId,lbl,bbox){
+    let all=[],si=0;
+    while(true){
+        const p=new URLSearchParams({f:"application/geo+json",bbox,limit:PAGE_LIMIT,startIndex:si});
+        addResult(`\n<span class="result-info">[${lbl}] Consultando...</span>`);
+        const r=await fetch(`${OGC_BASE}/${layerId}/items?${p}`);
+        if(!r.ok)throw new Error(`API error ${lbl}: ${r.status}`);
+        const d=await r.json(), feats=d.features||[], nr=d.numberReturned||feats.length;
+        all=all.concat(feats);
+        if(nr<PAGE_LIMIT)break; si+=nr;
+    }
+    addResult(`\n<span class="result-info">[${lbl}] ${all.length} features</span>`);
+    return all;
+}
+async function queryAllFloodLayers(bbox){
+    const res={}; for(const l of FLOOD_LAYERS) res[l.id]=await queryOneLayer(l.id,l.label,bbox); return res;
+}
+
+function showFloodZones(rbl){
+    floodLayers.forEach(l=>map.removeLayer(l)); floodLayers=[]; let all=[];
+    for(const ld of FLOOD_LAYERS){
+        const feats=rbl[ld.id]||[]; if(!feats.length)continue;
+        feats.forEach(f=>{f.properties=f.properties||{};f.properties._periodo=ld.label;});
+        all=all.concat(feats);
+        const gj=L.geoJSON({type:"FeatureCollection",features:feats},{
+            style:()=>({color:ld.color,weight:1.5,fillColor:ld.color,fillOpacity:ld.fillOpacity}),
+            onEachFeature:(f,ly)=>{const p=f.properties||{};ly.bindPopup(`<b>Z.I. (${p._periodo})</b><br>Rio: ${p.rio||"-"}<br>Zona: ${p.zona||"-"}<br>Demarcacion: ${p.demarcacio||"-"}`);}
+        }).addTo(map);
+        floodLayers.push(gj);
+    }
+    lastFloodGeoJSON={type:"FeatureCollection",features:all};
+    document.getElementById("dl-zi").disabled=all.length===0;
+}
+
+// --- Parcel GML parser ---
+function parseParcelGML(xml){
+    const doc=new DOMParser().parseFromString(xml,"text/xml");
+    const exc=doc.querySelector("ExceptionText"); if(exc)throw new Error("Catastro: "+exc.textContent);
+    if(doc.documentElement.getAttribute("numberMatched")==="0")return null;
+    const pl=doc.getElementsByTagNameNS("http://www.opengis.net/gml/3.2","posList")[0];
+    if(!pl||!pl.textContent.trim())return null;
+    const c=pl.textContent.trim().split(/\s+/).map(Number), ring=[];
+    for(let i=0;i<c.length;i+=2) ring.push([c[i+1],c[i]]);
+    const ref=doc.getElementsByTagNameNS("http://inspire.ec.europa.eu/schemas/cp/4.0","nationalCadastralReference")[0];
+    const area=doc.getElementsByTagNameNS("http://inspire.ec.europa.eu/schemas/cp/4.0","areaValue")[0];
+    return{refcat:ref?ref.textContent:"",area:area?area.textContent:"?",ring};
+}
+
+// --- Downloads ---
+function downloadJSON(d,fn){const b=new Blob([JSON.stringify(d,null,2)],{type:"application/geo+json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=fn;a.click();}
+function downloadZI(){if(lastFloodGeoJSON)downloadJSON(lastFloodGeoJSON,"zonas_inundables.geojson");}
+function downloadParcel(){if(lastParcelGeoJSON)downloadJSON(lastParcelGeoJSON,"parcela_catastral.geojson");}
+
+// --- Flood result display helper ---
+function showPointFloodResult(hitsByLayer, label){
+    let total=0; for(const ld of FLOOD_LAYERS) total+=(hitsByLayer[ld.id]||[]).length;
+    if(total>0){
+        showFloodZones(hitsByLayer); addResult(`\n`);
+        for(const ld of FLOOD_LAYERS){
+            const h=hitsByLayer[ld.id]||[];
+            if(h.length) { addResult(`\n<span class="result-si">SI (${ld.label}) - ${label} en zona inundable</span>`); h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);}); }
+            else addResult(`\n<span class="result-no">NO (${ld.label})</span>`);
+        }
+        const ab=L.latLngBounds([]); floodLayers.forEach(l=>ab.extend(l.getBounds())); if(ab.isValid())map.fitBounds(ab.pad(0.2));
+    } else { addResult(`\n\n<span class="result-no">NO - ${label} NO en zona inundable (T=10, T=100, T=500)</span>`); }
+}
+
+// --- Point flood check helper ---
+function filterPointHits(resultsByLayer, point){
+    const hbl={}; for(const ld of FLOOD_LAYERS){ hbl[ld.id]=(resultsByLayer[ld.id]||[]).filter(f=>{try{return turf.booleanPointInPolygon(point,f);}catch{return false;}}); }
+    return hbl;
+}
+
+// --- Search: Coordinates ---
+async function searchByCoords(){
+    clearLayers();setLoading(true);setResult("");
+    try{
+        let x=parseFloat(document.getElementById("inp-x").value.replace(",",".")),y=parseFloat(document.getElementById("inp-y").value.replace(",","."));
+        if(isNaN(x)||isNaN(y)){setResult("Coordenadas no validas.");return;}
+        const crs=document.getElementById("crs-select").value; let lon,lat;
+        if(crs==="25830"){const t=proj4("EPSG:25830","EPSG:4326",[x,y]);lon=t[0];lat=t[1];setResult(`<span class="result-info">UTM: X=${x}, Y=${y} → lon=${lon.toFixed(6)}, lat=${lat.toFixed(6)}</span>`);}
+        else{lon=x;lat=y;setResult(`<span class="result-info">Punto: lon=${lon.toFixed(6)}, lat=${lat.toFixed(6)}</span>`);}
+        marker=L.marker([lat,lon]).addTo(map); map.setView([lat,lon],16);
+        const bbox=`${lon-BUFFER},${lat-BUFFER},${lon+BUFFER},${lat+BUFFER}`;
+        const rbl=await queryAllFloodLayers(bbox);
+        showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"El punto");
+    }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
+}
+
+// --- Search: Cadastral ref ---
+async function searchByRefcat(){
+    clearLayers();setLoading(true);setResult("");
+    try{
+        const refcat=document.getElementById("inp-refcat").value.trim().toUpperCase();
+        if(!refcat){setResult("Escriba una referencia catastral.");return;}
+        setResult(`<span class="result-info">Buscando parcela: ${refcat}</span>`);
+        const params=new URLSearchParams({service:"WFS",version:"2.0.0",request:"GetFeature",storedQuery_Id:"GetParcel",REFCAT:refcat,SRSNAME:"EPSG::4326"});
+        const resp=await fetch(`${CATASTRO_WFS}?${params}`); if(!resp.ok)throw new Error(`WFS error: ${resp.status}`);
+        const parcel=parseParcelGML(await resp.text());
+        if(!parcel){addResult(`\n<span class="result-si">No se encontro la parcela.</span>`);return;}
+        addResult(`\n<span class="result-info">Parcela: ${parcel.refcat} (${parcel.area} m2)</span>`);
+        const pf={type:"Feature",properties:{refcat:parcel.refcat,area_m2:parcel.area},geometry:{type:"Polygon",coordinates:[parcel.ring]}};
+        lastParcelGeoJSON={type:"FeatureCollection",features:[pf]};
+        parcelLayer=L.geoJSON(lastParcelGeoJSON,{style:()=>parcelStyle}).addTo(map);
+        map.fitBounds(parcelLayer.getBounds().pad(0.5));
+        document.getElementById("dl-parcel").disabled=false;
+        const bb=turf.bbox(pf),bbox=`${bb[0]},${bb[1]},${bb[2]},${bb[3]}`;
+        const rbl=await queryAllFloodLayers(bbox);
+        const pp=turf.polygon([parcel.ring]),hbl={};let tot=0;
+        for(const ld of FLOOD_LAYERS){const h=(rbl[ld.id]||[]).filter(f=>{try{return turf.booleanIntersects(pp,f);}catch{return false;}});hbl[ld.id]=h;tot+=h.length;}
+        if(tot>0){
+            showFloodZones(hbl);addResult(`\n`);
+            for(const ld of FLOOD_LAYERS){const h=hbl[ld.id]||[];if(h.length){addResult(`\n<span class="result-si">SI (${ld.label}) - Parcela en zona inundable</span>`);h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);});}else addResult(`\n<span class="result-no">NO (${ld.label})</span>`);}
+            const ab=parcelLayer.getBounds();floodLayers.forEach(l=>ab.extend(l.getBounds()));map.fitBounds(ab.pad(0.2));
+        }else{addResult(`\n\n<span class="result-no">NO - La parcela NO en zona inundable (T=10, T=100, T=500)</span>`);}
+    }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
+}
+
+// --- JSONP ---
+function fetchJsonp(url){
+    return new Promise((res,rej)=>{
+        const cb="_cc_"+Math.random().toString(36).slice(2),s=document.createElement("script");
+        const to=setTimeout(()=>{cl();rej(new Error("Timeout"));},15000);
+        function cl(){clearTimeout(to);delete window[cb];s.remove();}
+        window[cb]=d=>{cl();res(d);}; s.src=url+(url.includes("?")?"&":"?")+"callback="+cb; s.onerror=()=>{cl();rej(new Error("Error de red"));}; document.head.appendChild(s);
+    });
+}
+
+// --- Address autocomplete ---
+let addrDebounce=null; const addrInput=document.getElementById("inp-address"),sugBox=document.getElementById("address-suggestions"); let selectedAddr=null;
+addrInput.addEventListener("input",function(){
+    clearTimeout(addrDebounce);selectedAddr=null;const q=this.value.trim();
+    if(q.length<3){sugBox.style.display="none";return;}
+    addrDebounce=setTimeout(async()=>{try{
+        const d=await fetchJsonp(`${CARTOCIUDAD_CANDIDATES}?q=${encodeURIComponent(q)}&limit=6`);
+        if(!d||!d.length){sugBox.style.display="none";return;}
+        sugBox.innerHTML="";d.forEach(item=>{const div=document.createElement("div");div.textContent=item.address;div.onclick=()=>{addrInput.value=item.address;selectedAddr=item;sugBox.style.display="none";};sugBox.appendChild(div);});sugBox.style.display="block";
+    }catch{sugBox.style.display="none";}},300);
+});
+document.addEventListener("click",e=>{if(!e.target.closest(".autocomplete-wrapper"))sugBox.style.display="none";});
+
+// --- Search: Address ---
+async function searchByAddress(){
+    clearLayers();setLoading(true);setResult("");
+    try{
+        let lat,lon,label;
+        if(selectedAddr&&selectedAddr.lat){lat=selectedAddr.lat;lon=selectedAddr.lng;label=selectedAddr.address||addrInput.value;}
+        else{const q=addrInput.value.trim();if(!q){setResult("Escriba una direccion.");return;} setResult(`<span class="result-info">Geocodificando...</span>`);
+            const d=await fetchJsonp(`${CARTOCIUDAD_FIND}?q=${encodeURIComponent(q)}`);if(!d||!d.lat){addResult(`\n<span class="result-si">No se encontro.</span>`);return;}
+            lat=d.lat;lon=d.lng;label=d.address||q;if(d.muni)label+=", "+d.muni;}
+        setResult(`<span class="result-info">Direccion: ${label}\nlon=${lon.toFixed(6)}, lat=${lat.toFixed(6)}</span>`);
+        marker=L.marker([lat,lon]).addTo(map).bindPopup(label).openPopup();map.setView([lat,lon],17);
+        const bbox=`${lon-BUFFER},${lat-BUFFER},${lon+BUFFER},${lat+BUFFER}`;
+        const rbl=await queryAllFloodLayers(bbox);
+        showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"La direccion");
+    }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
+}
+
+// --- Search: Geolocation ---
+function searchByGeolocation(){
+    clearLayers();setLoading(true);setResult(`<span class="result-info">Obteniendo ubicacion...</span>`);
+    if(!navigator.geolocation){setResult(`<span class="result-si">Su navegador no soporta geolocalizacion.</span>`);setLoading(false);return;}
+    navigator.geolocation.getCurrentPosition(async pos=>{
+        try{
+            const lon=pos.coords.longitude,lat=pos.coords.latitude,acc=pos.coords.accuracy;
+            setResult(`<span class="result-info">Ubicacion: lon=${lon.toFixed(6)}, lat=${lat.toFixed(6)}\nPrecision: ~${Math.round(acc)} m</span>`);
+            marker=L.marker([lat,lon]).addTo(map).bindPopup("Mi ubicacion").openPopup();
+            L.circle([lat,lon],{radius:acc,color:"#00d4ff",fillOpacity:0.1,weight:1}).addTo(map);
+            map.setView([lat,lon],16);
+            const bbox=`${lon-BUFFER},${lat-BUFFER},${lon+BUFFER},${lat+BUFFER}`;
+            const rbl=await queryAllFloodLayers(bbox);
+            showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"Usted");
+        }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
+    },err=>{
+        const m={1:"Permiso denegado.",2:"Ubicacion no disponible.",3:"Tiempo agotado."};
+        setResult(`<span class="result-si">${m[err.code]||"Error."}</span>`);setLoading(false);
+    },{enableHighAccuracy:true,timeout:15000});
+}
+
+// --- Click on map ---
+map.on("click",e=>{
+    document.getElementById("crs-select").value="4326";updateLabels();
+    document.getElementById("inp-x").value=e.latlng.lng.toFixed(6);
+    document.getElementById("inp-y").value=e.latlng.lat.toFixed(6);
+    switchTab("coords");searchByCoords();
+});
+map.once("click",()=>{document.getElementById("info-click").style.display="none";});
+</script>
+</body>
+</html>

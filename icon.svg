@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#16213e"/>
+  <path d="M256 80c-80 0-152 60-152 140 0 100 152 212 152 212s152-112 152-212c0-80-72-140-152-140z" fill="#2196F3" opacity="0.6"/>
+  <path d="M256 120c-56 0-108 42-108 100 0 72 108 152 108 152s108-80 108-152c0-58-52-100-108-100z" fill="#1976D2" opacity="0.7"/>
+  <path d="M256 160c-32 0-64 24-64 60 0 44 64 92 64 92s64-48 64-92c0-36-32-60-64-60z" fill="#0D47A1" opacity="0.8"/>
+  <circle cx="256" cy="210" r="22" fill="#FDD835"/>
+  <text x="256" y="460" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="72" fill="#00d4ff">Z.I.</text>
+</svg>

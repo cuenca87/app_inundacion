@@ -1,0 +1,18 @@
+{
+  "name": "Visor Zonas Inundables",
+  "short_name": "Z. Inundables",
+  "description": "Consulta zonas inundables (T=10, T=100, T=500) por coordenadas, referencia catastral, direccion o geolocalizacion",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1a1a2e",
+  "theme_color": "#16213e",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
