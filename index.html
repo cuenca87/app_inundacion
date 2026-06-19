@@ -132,8 +132,8 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
 
     <div class="tab-bar">
         <button class="tab-btn active" onclick="switchTab('coords')">Coordenadas</button>
-        <button class="tab-btn" onclick="switchTab('refcat')">Ref. Catastral</button>
         <button class="tab-btn" onclick="switchTab('geolocate')">Ubicaci&oacute;n</button>
+        <button class="tab-btn" onclick="switchTab('refcat')">Ref. Catastral</button>
         <button class="tab-btn" onclick="switchTab('address')">Direcci&oacute;n</button>
     </div>
 
@@ -197,10 +197,11 @@ proj4.defs("EPSG:25830", "+proj=utm +zone=30 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0
 // --- Constants ---
 const OGC_BASE = "https://wmts.mapama.gob.es/sig-api/ogc/features/v1/collections";
 const FLOOD_LAYERS = [
-    { id: "agua:Zi_laminas_q500", label: "T=500", color: "#64B5F6", fillOpacity: 0.20 },
-    { id: "agua:Zi_laminas_q100", label: "T=100", color: "#1976D2", fillOpacity: 0.30 },
-    { id: "agua:Zi_laminas_q10",  label: "T=10",  color: "#0D47A1", fillOpacity: 0.40 },
+    { id: "agua:Zi_laminas_q500", label: "T=500", color: "#64B5F6", fillOpacity: 0.20, wmsDepth: "NZ.Flood.FluvialT500" },
+    { id: "agua:Zi_laminas_q100", label: "T=100", color: "#1976D2", fillOpacity: 0.30, wmsDepth: "NZ.Flood.FluvialT100" },
+    { id: "agua:Zi_laminas_q10",  label: "T=10",  color: "#0D47A1", fillOpacity: 0.40, wmsDepth: "NZ.Flood.FluvialT10" },
 ];
+const FLOOD_DEPTH_WMS = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones";
 const CATASTRO_WFS = "https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx";
 const CARTOCIUDAD_CANDIDATES = "https://www.cartociudad.es/geocoder/api/geocoder/candidatesJsonp";
 const CARTOCIUDAD_FIND = "https://www.cartociudad.es/geocoder/api/geocoder/findJsonp";
@@ -212,15 +213,34 @@ const map = L.map("map").setView([40.0, -3.5], 6);
 const pnoa = L.tileLayer("https://www.ign.es/wmts/pnoa-ma?layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&format=image/jpeg&TileMatrix={z}&TileRow={y}&TileCol={x}", { attribution:"PNOA &copy; IGN", maxZoom:19 });
 const ignBase = L.tileLayer.wms("https://www.ign.es/wms-inspire/ign-base?", { layers:"IGNBaseTodo", format:"image/png", transparent:false, attribution:"&copy; IGN" });
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution:"&copy; OSM" });
+const redHidro = L.tileLayer.wms("https://servicios.idee.es/wms-inspire/hidrografia?", { layers:"HY.Network", format:"image/png", transparent:true, attribution:"&copy; IGN", opacity:0.8 });
+const catastroWmsLayer = L.tileLayer.wms("https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWMS.aspx?", { layers:"PARCELA", format:"image/png", transparent:true, attribution:"&copy; Catastro", opacity:0.7 });
+const CATASTRO_WMS_GFI = "https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWMS.aspx";
 pnoa.addTo(map);
-L.control.layers({"PNOA":pnoa,"IGN Base":ignBase,"OpenStreetMap":osm}).addTo(map);
+redHidro.addTo(map);
+L.control.layers({"PNOA":pnoa,"IGN Base":ignBase,"OpenStreetMap":osm},{"Red hidrográfica":redHidro,"Parcelas catastrales":catastroWmsLayer}).addTo(map);
 
 let marker=null, floodLayers=[], parcelLayer=null, lastFloodGeoJSON=null, lastParcelGeoJSON=null;
+let catastroClickMode=false;
 const parcelStyle={color:"#ff1744",weight:3,fillColor:"#ff1744",fillOpacity:0.15};
 
 // --- Tabs ---
-const TAB_IDS=["coords","refcat","geolocate","address"];
-function switchTab(id){ document.querySelectorAll(".tab-btn").forEach((b,i)=>b.classList.toggle("active",TAB_IDS[i]===id)); TAB_IDS.forEach(t=>document.getElementById("tab-"+t).classList.toggle("active",t===id)); }
+const TAB_IDS=["coords","geolocate","refcat","address"];
+function switchTab(id){
+    document.querySelectorAll(".tab-btn").forEach((b,i)=>b.classList.toggle("active",TAB_IDS[i]===id));
+    TAB_IDS.forEach(t=>document.getElementById("tab-"+t).classList.toggle("active",t===id));
+    // Catastro layer + base opacity
+    const baseLayers=[pnoa,ignBase,osm];
+    if(id==="refcat"){
+        if(!map.hasLayer(catastroWmsLayer)) catastroWmsLayer.addTo(map);
+        catastroClickMode=true;
+        baseLayers.forEach(l=>{if(map.hasLayer(l))l.setOpacity(0.5);});
+    } else {
+        if(map.hasLayer(catastroWmsLayer)) map.removeLayer(catastroWmsLayer);
+        catastroClickMode=false;
+        baseLayers.forEach(l=>{if(map.hasLayer(l))l.setOpacity(1);});
+    }
+}
 function updateLabels(){ const u=document.getElementById("crs-select").value==="25830"; document.getElementById("lbl-x").textContent=u?"X (Este)":"Longitud (X)"; document.getElementById("lbl-y").textContent=u?"Y (Norte)":"Latitud (Y)"; document.getElementById("inp-x").placeholder=u?"440000":"-3.7037"; document.getElementById("inp-y").placeholder=u?"4475000":"40.4168"; }
 
 // --- Helpers ---
@@ -281,14 +301,43 @@ function downloadJSON(d,fn){const b=new Blob([JSON.stringify(d,null,2)],{type:"a
 function downloadZI(){if(lastFloodGeoJSON)downloadJSON(lastFloodGeoJSON,"zonas_inundables.geojson");}
 function downloadParcel(){if(lastParcelGeoJSON)downloadJSON(lastParcelGeoJSON,"parcela_catastral.geojson");}
 
+// --- Flood depth query via WMS GetFeatureInfo ---
+async function queryFloodDepth(lon, lat, wmsLayerName) {
+    try {
+        const d = 0.0005;
+        const params = new URLSearchParams({
+            service: "WMS", version: "1.1.1", request: "GetFeatureInfo",
+            layers: wmsLayerName, query_layers: wmsLayerName,
+            info_format: "application/json",
+            width: "101", height: "101",
+            bbox: `${lon-d},${lat-d},${lon+d},${lat+d}`,
+            srs: "EPSG:4326", x: "50", y: "50"
+        });
+        const resp = await fetch(`${FLOOD_DEPTH_WMS}?${params}`);
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        const val = data?.features?.[0]?.properties?.GRAY_INDEX;
+        if (val == null || val > 900 || val < 0) return null;
+        return val;
+    } catch { return null; }
+}
+
 // --- Flood result display helper ---
-function showPointFloodResult(hitsByLayer, label){
+async function showPointFloodResult(hitsByLayer, label, lon, lat) {
     let total=0; for(const ld of FLOOD_LAYERS) total+=(hitsByLayer[ld.id]||[]).length;
     if(total>0){
         showFloodZones(hitsByLayer); addResult(`\n`);
         for(const ld of FLOOD_LAYERS){
             const h=hitsByLayer[ld.id]||[];
-            if(h.length) { addResult(`\n<span class="result-si">SI (${ld.label}) - ${label} en zona inundable</span>`); h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);}); }
+            if(h.length) {
+                let depthMsg = "";
+                if (lon != null && lat != null) {
+                    const depth = await queryFloodDepth(lon, lat, ld.wmsDepth);
+                    if (depth != null) depthMsg = ` | Altura de inundacion: ${depth.toFixed(2)} m`;
+                }
+                addResult(`\n<span class="result-si">SI (${ld.label}) - ${label} en zona inundable${depthMsg}</span>`);
+                h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);});
+            }
             else addResult(`\n<span class="result-no">NO (${ld.label})</span>`);
         }
         const ab=L.latLngBounds([]); floodLayers.forEach(l=>ab.extend(l.getBounds())); if(ab.isValid())map.fitBounds(ab.pad(0.2));
@@ -313,7 +362,7 @@ async function searchByCoords(){
         marker=L.marker([lat,lon]).addTo(map); map.setView([lat,lon],16);
         const bbox=`${lon-BUFFER},${lat-BUFFER},${lon+BUFFER},${lat+BUFFER}`;
         const rbl=await queryAllFloodLayers(bbox);
-        showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"El punto");
+        await showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"El punto",lon,lat);
     }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
 }
 
@@ -338,9 +387,10 @@ async function searchByRefcat(){
         const rbl=await queryAllFloodLayers(bbox);
         const pp=turf.polygon([parcel.ring]),hbl={};let tot=0;
         for(const ld of FLOOD_LAYERS){const h=(rbl[ld.id]||[]).filter(f=>{try{return turf.booleanIntersects(pp,f);}catch{return false;}});hbl[ld.id]=h;tot+=h.length;}
+        const centroid=turf.centroid(pp);const clon=centroid.geometry.coordinates[0],clat=centroid.geometry.coordinates[1];
         if(tot>0){
             showFloodZones(hbl);addResult(`\n`);
-            for(const ld of FLOOD_LAYERS){const h=hbl[ld.id]||[];if(h.length){addResult(`\n<span class="result-si">SI (${ld.label}) - Parcela en zona inundable</span>`);h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);});}else addResult(`\n<span class="result-no">NO (${ld.label})</span>`);}
+            for(const ld of FLOOD_LAYERS){const h=hbl[ld.id]||[];if(h.length){let dm="";const dv=await queryFloodDepth(clon,clat,ld.wmsDepth);if(dv!=null)dm=` | Altura de inundacion: ${dv.toFixed(2)} m`;addResult(`\n<span class="result-si">SI (${ld.label}) - Parcela en zona inundable${dm}</span>`);h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);});}else addResult(`\n<span class="result-no">NO (${ld.label})</span>`);}
             const ab=parcelLayer.getBounds();floodLayers.forEach(l=>ab.extend(l.getBounds()));map.fitBounds(ab.pad(0.2));
         }else{addResult(`\n\n<span class="result-no">NO - La parcela NO en zona inundable (T=10, T=100, T=500)</span>`);}
     }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
@@ -382,7 +432,7 @@ async function searchByAddress(){
         marker=L.marker([lat,lon]).addTo(map).bindPopup(label).openPopup();map.setView([lat,lon],17);
         const bbox=`${lon-BUFFER},${lat-BUFFER},${lon+BUFFER},${lat+BUFFER}`;
         const rbl=await queryAllFloodLayers(bbox);
-        showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"La direccion");
+        await showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"La direccion",lon,lat);
     }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
 }
 
@@ -399,7 +449,7 @@ function searchByGeolocation(){
             map.setView([lat,lon],16);
             const bbox=`${lon-BUFFER},${lat-BUFFER},${lon+BUFFER},${lat+BUFFER}`;
             const rbl=await queryAllFloodLayers(bbox);
-            showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"Usted");
+            await showPointFloodResult(filterPointHits(rbl,turf.point([lon,lat])),"Usted",lon,lat);
         }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
     },err=>{
         const m={1:"Permiso denegado.",2:"Ubicacion no disponible.",3:"Tiempo agotado."};
@@ -407,14 +457,45 @@ function searchByGeolocation(){
     },{enableHighAccuracy:true,timeout:15000});
 }
 
+// --- Catastro click: GetFeatureInfo to get REFCAT ---
+async function handleCatastroClick(latlng) {
+    const lon=latlng.lng, lat=latlng.lat, d=0.0002;
+    setResult(`<span class="result-info">Consultando parcela catastral...</span>`);
+    try {
+        const params=new URLSearchParams({
+            service:"WMS",version:"1.1.1",request:"GetFeatureInfo",
+            layers:"PARCELA",query_layers:"PARCELA",info_format:"text/html",
+            width:"101",height:"101",
+            bbox:`${lon-d},${lat-d},${lon+d},${lat+d}`,
+            srs:"EPSG:4326",x:"50",y:"50"
+        });
+        const resp=await fetch(`${CATASTRO_WMS_GFI}?${params}`);
+        const html=await resp.text();
+        const match=html.match(/>(\d{5}[A-Z0-9]{9})</);
+        if(match){
+            const rc=match[1];
+            document.getElementById("inp-refcat").value=rc;
+            setResult(`<span class="result-info">Parcela seleccionada: <b>${rc}</b>\nPulse "Buscar" para consultar zona inundable.</span>`);
+        } else {
+            setResult(`<span class="result-info">No se encontro parcela en este punto.</span>`);
+        }
+    } catch(e) {
+        setResult(`<span class="result-si">Error al consultar Catastro: ${e.message}</span>`);
+    }
+}
+
 // --- Click on map ---
 map.on("click",e=>{
+    document.getElementById("info-click").style.display="none";
+    if(catastroClickMode){
+        handleCatastroClick(e.latlng);
+        return;
+    }
     document.getElementById("crs-select").value="4326";updateLabels();
     document.getElementById("inp-x").value=e.latlng.lng.toFixed(6);
     document.getElementById("inp-y").value=e.latlng.lat.toFixed(6);
     switchTab("coords");searchByCoords();
 });
-map.once("click",()=>{document.getElementById("info-click").style.display="none";});
 </script>
 </body>
 </html>
