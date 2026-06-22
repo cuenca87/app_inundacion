@@ -197,11 +197,12 @@ proj4.defs("EPSG:25830", "+proj=utm +zone=30 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0
 // --- Constants ---
 const OGC_BASE = "https://wmts.mapama.gob.es/sig-api/ogc/features/v1/collections";
 const FLOOD_LAYERS = [
-    { id: "agua:Zi_laminas_q500", label: "T=500", color: "#64B5F6", fillOpacity: 0.20, wmsDepth: "NZ.Flood.FluvialT500" },
-    { id: "agua:Zi_laminas_q100", label: "T=100", color: "#1976D2", fillOpacity: 0.30, wmsDepth: "NZ.Flood.FluvialT100" },
-    { id: "agua:Zi_laminas_q10",  label: "T=10",  color: "#0D47A1", fillOpacity: 0.40, wmsDepth: "NZ.Flood.FluvialT10" },
+    { id: "agua:Zi_laminas_q500", label: "T=500", color: "#64B5F6", fillOpacity: 0.20, wmsDepth: "NZ.Flood.FluvialT500", wmtsLayer: "Zi_laminas_q500" },
+    { id: "agua:Zi_laminas_q100", label: "T=100", color: "#1976D2", fillOpacity: 0.30, wmsDepth: "NZ.Flood.FluvialT100", wmtsLayer: "Zi_laminas_q100" },
+    { id: "agua:Zi_laminas_q10",  label: "T=10",  color: "#0D47A1", fillOpacity: 0.40, wmsDepth: "NZ.Flood.FluvialT10",  wmtsLayer: "Zi_laminas_q10" },
 ];
 const FLOOD_DEPTH_WMS = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones";
+const FLOOD_WMTS_GFI = "https://wmts.mapama.gob.es/sig/agua/gwc/service/wmts";
 const CATASTRO_WFS = "https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx";
 const CARTOCIUDAD_CANDIDATES = "https://www.cartociudad.es/geocoder/api/geocoder/candidatesJsonp";
 const CARTOCIUDAD_FIND = "https://www.cartociudad.es/geocoder/api/geocoder/findJsonp";
@@ -301,6 +302,24 @@ function downloadJSON(d,fn){const b=new Blob([JSON.stringify(d,null,2)],{type:"a
 function downloadZI(){if(lastFloodGeoJSON)downloadJSON(lastFloodGeoJSON,"zonas_inundables.geojson");}
 function downloadParcel(){if(lastParcelGeoJSON)downloadJSON(lastParcelGeoJSON,"parcela_catastral.geojson");}
 
+// --- Flood report URL via WMTS GetFeatureInfo ---
+async function queryFloodReport(lon, lat, wmtsLayer) {
+    try {
+        const z = 14, n = Math.pow(2, z);
+        const x = Math.floor((lon + 180) / 360 * n);
+        const latRad = lat * Math.PI / 180;
+        const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+        const px = Math.floor(((lon + 180) / 360 * n - x) * 256);
+        const py = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n - y) * 256);
+        const url = `${FLOOD_WMTS_GFI}?service=WMTS&request=GetFeatureInfo&version=1.0.0&layer=${wmtsLayer}&tilematrixset=GoogleMapsCompatible&tilematrix=${z}&tilerow=${y}&tilecol=${x}&infoformat=text/html&i=${px}&j=${py}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return null;
+        const html = await resp.text();
+        const m = html.match(/href="(https:\/\/sig\.mapama\.gob\.es\/WebServices[^"]*)"/);
+        return m ? m[1].replace(/&amp;/g, "&") : null;
+    } catch { return null; }
+}
+
 // --- Flood depth query via WMS GetFeatureInfo ---
 async function queryFloodDepth(lon, lat, wmsLayerName) {
     try {
@@ -330,13 +349,18 @@ async function showPointFloodResult(hitsByLayer, label, lon, lat) {
         for(const ld of FLOOD_LAYERS){
             const h=hitsByLayer[ld.id]||[];
             if(h.length) {
-                let depthMsg = "";
+                let depthMsg = "", reportMsg = "";
                 if (lon != null && lat != null) {
-                    const depth = await queryFloodDepth(lon, lat, ld.wmsDepth);
-                    if (depth != null) depthMsg = ` | Altura de inundacion: ${depth.toFixed(2)} m`;
+                    const [depth, reportUrl] = await Promise.all([
+                        queryFloodDepth(lon, lat, ld.wmsDepth),
+                        queryFloodReport(lon, lat, ld.wmtsLayer)
+                    ]);
+                    if (depth != null) depthMsg = ` | Calado: ${depth.toFixed(2)} m`;
+                    if (reportUrl) reportMsg = `\n  <a href="${reportUrl}" target="_blank" style="color:#64B5F6;font-size:11px;">Ver informe SNCZI (caudal, hipotesis, estudio...)</a>`;
                 }
                 addResult(`\n<span class="result-si">SI (${ld.label}) - ${label} en zona inundable${depthMsg}</span>`);
                 h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);});
+                if (reportMsg) addResult(reportMsg);
             }
             else addResult(`\n<span class="result-no">NO (${ld.label})</span>`);
         }
@@ -390,7 +414,7 @@ async function searchByRefcat(){
         const centroid=turf.centroid(pp);const clon=centroid.geometry.coordinates[0],clat=centroid.geometry.coordinates[1];
         if(tot>0){
             showFloodZones(hbl);addResult(`\n`);
-            for(const ld of FLOOD_LAYERS){const h=hbl[ld.id]||[];if(h.length){let dm="";const dv=await queryFloodDepth(clon,clat,ld.wmsDepth);if(dv!=null)dm=` | Altura de inundacion: ${dv.toFixed(2)} m`;addResult(`\n<span class="result-si">SI (${ld.label}) - Parcela en zona inundable${dm}</span>`);h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);});}else addResult(`\n<span class="result-no">NO (${ld.label})</span>`);}
+            for(const ld of FLOOD_LAYERS){const h=hbl[ld.id]||[];if(h.length){let dm="",rm="";const[dv,ru]=await Promise.all([queryFloodDepth(clon,clat,ld.wmsDepth),queryFloodReport(clon,clat,ld.wmtsLayer)]);if(dv!=null)dm=` | Calado: ${dv.toFixed(2)} m`;if(ru)rm=`\n  <a href="${ru}" target="_blank" style="color:#64B5F6;font-size:11px;">Ver informe SNCZI (caudal, hipotesis, estudio...)</a>`;addResult(`\n<span class="result-si">SI (${ld.label}) - Parcela en zona inundable${dm}</span>`);h.forEach(f=>{const p=f.properties||{};addResult(`\n  Rio: ${p.rio||"-"}  |  Zona: ${p.zona||"-"}`);});if(rm)addResult(rm);}else addResult(`\n<span class="result-no">NO (${ld.label})</span>`);}
             const ab=parcelLayer.getBounds();floodLayers.forEach(l=>ab.extend(l.getBounds()));map.fitBounds(ab.pad(0.2));
         }else{addResult(`\n\n<span class="result-no">NO - La parcela NO en zona inundable (T=10, T=100, T=500)</span>`);}
     }catch(e){addResult(`\n<span class="result-si">Error: ${e.message}</span>`);}finally{setLoading(false);}
