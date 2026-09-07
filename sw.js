@@ -1,4 +1,4 @@
-const CACHE_NAME = "zi-visor-v1";
+const CACHE_NAME = "zi-visor-v2";
 const ASSETS = [
   "./index.html",
   "./icon.svg",
@@ -25,8 +25,12 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
-  // Network-first for API calls, cache-first for assets
+  // Network-first for API calls, cache-first for assets. "mapama.gob.es"
+  // ya no lo usa ningún fetch() del código (migrado a gis.miteco.gob.es),
+  // se deja por si acaso algún enlace suelto lo referencia; miteco.gob.es
+  // añadido porque es el dominio real de la OGC API desde la migración.
   if (e.request.url.includes("mapama.gob.es") ||
+      e.request.url.includes("miteco.gob.es") ||
       e.request.url.includes("catastro.meh.es") ||
       e.request.url.includes("cartociudad.es") ||
       e.request.url.includes("ign.es/wm")) {
