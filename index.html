@@ -195,14 +195,24 @@ if ("serviceWorker" in navigator) {
 proj4.defs("EPSG:25830", "+proj=utm +zone=30 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
 
 // --- Constants ---
-const OGC_BASE = "https://wmts.mapama.gob.es/sig-api/ogc/features/v1/collections";
+// Dominio migrado (2026-09): el antiguo wmts.mapama.gob.es/sig-api/... sigue
+// vivo pero ahora apunta a un GeoServer distinto (agricultura/pesca, nada de
+// hidrología) — devuelve 404/vacío para estas colecciones sin avisar del
+// cambio. Verificado en vivo que este es el mismo dominio que ya usan
+// visor_rios/incendios_2026 para el resto de capas de MITECO.
+const OGC_BASE = "https://gis.miteco.gob.es/geoserver/ogc/features/v1/collections";
 const FLOOD_LAYERS = [
-    { id: "agua:Zi_laminas_q500", label: "T=500", color: "#64B5F6", fillOpacity: 0.20, wmsDepth: "NZ.Flood.FluvialT500", wmtsLayer: "Zi_laminas_q500" },
-    { id: "agua:Zi_laminas_q100", label: "T=100", color: "#1976D2", fillOpacity: 0.30, wmsDepth: "NZ.Flood.FluvialT100", wmtsLayer: "Zi_laminas_q100" },
-    { id: "agua:Zi_laminas_q10",  label: "T=10",  color: "#0D47A1", fillOpacity: 0.40, wmsDepth: "NZ.Flood.FluvialT10",  wmtsLayer: "Zi_laminas_q10" },
+    { id: "agua:Zi_laminas_q500", label: "T=500", color: "#64B5F6", fillOpacity: 0.20, wmsDepth: "NZ.Flood.FluvialT500", wmtsLayer: "agua:Zi_laminas_q500" },
+    { id: "agua:Zi_laminas_q100", label: "T=100", color: "#1976D2", fillOpacity: 0.30, wmsDepth: "NZ.Flood.FluvialT100", wmtsLayer: "agua:Zi_laminas_q100" },
+    { id: "agua:Zi_laminas_q10",  label: "T=10",  color: "#0D47A1", fillOpacity: 0.40, wmsDepth: "NZ.Flood.FluvialT10",  wmtsLayer: "agua:Zi_laminas_q10" },
 ];
 const FLOOD_DEPTH_WMS = "https://servicios.idee.es/wms-inspire/riesgos-naturales/inundaciones";
-const FLOOD_WMTS_GFI = "https://wmts.mapama.gob.es/sig/agua/gwc/service/wmts";
+// Migrado igual que OGC_BASE — además el tilematrixset cambió de nombre
+// ("GoogleMapsCompatible" ya no existe en este GeoServer/GWC, ahora es
+// "EPSG:900913" con el matrix prefijado "EPSG:900913:<z>", no el número
+// suelto). Verificado en vivo con un punto real dentro de zona inundable
+// (Arroyo de Meaques, Madrid) antes de dar el cambio por bueno.
+const FLOOD_WMTS_GFI = "https://gis.miteco.gob.es/geoserver/gwc/service/wmts";
 const CATASTRO_WFS = "https://ovc.catastro.meh.es/INSPIRE/wfsCP.aspx";
 const CARTOCIUDAD_CANDIDATES = "https://www.cartociudad.es/geocoder/api/geocoder/candidatesJsonp";
 const CARTOCIUDAD_FIND = "https://www.cartociudad.es/geocoder/api/geocoder/findJsonp";
@@ -311,7 +321,7 @@ async function queryFloodReport(lon, lat, wmtsLayer) {
         const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
         const px = Math.floor(((lon + 180) / 360 * n - x) * 256);
         const py = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n - y) * 256);
-        const url = `${FLOOD_WMTS_GFI}?service=WMTS&request=GetFeatureInfo&version=1.0.0&layer=${wmtsLayer}&tilematrixset=GoogleMapsCompatible&tilematrix=${z}&tilerow=${y}&tilecol=${x}&infoformat=text/html&i=${px}&j=${py}`;
+        const url = `${FLOOD_WMTS_GFI}?service=WMTS&request=GetFeatureInfo&version=1.0.0&layer=${wmtsLayer}&tilematrixset=EPSG:900913&tilematrix=EPSG:900913:${z}&tilerow=${y}&tilecol=${x}&infoformat=text/html&i=${px}&j=${py}`;
         const resp = await fetch(url);
         if (!resp.ok) return null;
         const html = await resp.text();
