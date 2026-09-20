@@ -99,6 +99,39 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     font-size:12px; pointer-events:none;
 }
 
+/* ---------- Ventana de capas de inundación ---------- */
+#flood-win {
+    position:absolute; top:10px; left:56px; z-index:1000; width:250px;
+    background:rgba(22,33,62,.95); border:1px solid #0f3460; border-radius:6px;
+    box-shadow:0 2px 10px rgba(0,0,0,.5); font-size:12px;
+}
+#flood-win.hidden, #flood-open.hidden { display:none; }
+#flood-win-head {
+    display:flex; align-items:center; gap:4px; padding:6px 8px; cursor:default;
+    background:#0f3460; border-radius:6px 6px 0 0; color:#00d4ff; font-weight:600;
+}
+#flood-win.min #flood-win-head { border-radius:6px; }
+#flood-win-head span { flex:1; }
+#flood-win-head button {
+    width:22px; height:22px; border:none; border-radius:3px; background:transparent;
+    color:#e0e0e0; font-size:15px; line-height:1; cursor:pointer;
+}
+#flood-win-head button:hover { background:rgba(255,255,255,.15); }
+#flood-win-body { padding:8px 10px; max-height:60vh; overflow-y:auto; }
+#flood-win.min #flood-win-body { display:none; }
+.fl-row { display:flex; align-items:center; gap:7px; margin:0 0 6px; cursor:pointer; color:#e0e0e0; font-size:12px; }
+.fl-row input { width:auto; margin:0; padding:0; }
+.fl-sw { width:18px; height:12px; border-radius:2px; flex-shrink:0; border:1px solid rgba(255,255,255,.35); }
+.fl-sw.line { height:0; border:none; border-top:3px solid; border-radius:0; }
+.fl-sub { color:#8892b0; font-size:10px; display:block; }
+.fl-op { display:flex; align-items:center; gap:8px; margin-top:8px; padding-top:8px; border-top:1px solid #0f3460; color:#8892b0; }
+.fl-op input { padding:0; }
+#flood-open {
+    position:absolute; top:10px; left:56px; z-index:1000; padding:7px 11px;
+    background:#0f3460; color:#00d4ff; border:1px solid #00d4ff; border-radius:5px;
+    font-size:12px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.5);
+}
+
 /* ---------- MOBILE ---------- */
 @media (max-width: 768px) {
     body { flex-direction:column; }
@@ -114,6 +147,9 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     #sidebar-header { padding:6px 10px; gap:8px; }
     .tab-btn { font-size:10px; padding:7px 2px; }
     .info-click { font-size:11px; top:6px; }
+    #flood-win { width:210px; top:6px; left:50px; }
+    #flood-open { top:6px; left:50px; }
+    #flood-win-body { max-height:40vh; }
     #result-panel h3 { padding:6px 10px 2px; font-size:10px; }
     #result-box { font-size:11px; margin:0 10px 6px; padding:8px; }
     .tab-content { padding:8px 10px; }
@@ -183,6 +219,23 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
 
 <div id="map">
     <div class="info-click" id="info-click">Click en el mapa para consultar un punto</div>
+
+    <button id="flood-open" class="hidden" onclick="floodWinOpen()">&#128167; Capas de inundaci&oacute;n</button>
+    <div id="flood-win">
+        <div id="flood-win-head">
+            <span>&#128167; Capas de inundaci&oacute;n</span>
+            <button id="flood-win-min" title="Minimizar" onclick="floodWinMin()">&minus;</button>
+            <button title="Cerrar" onclick="floodWinClose()">&times;</button>
+        </div>
+        <div id="flood-win-body">
+            <label class="fl-row"><input type="checkbox" data-fl="t10"><i class="fl-sw" style="background:#0D47A1"></i><div>T=10 <small class="fl-sub">Alta probabilidad</small></div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="t100"><i class="fl-sw" style="background:#1976D2"></i><div>T=100 <small class="fl-sub">Probabilidad media u ocasional</small></div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="t500"><i class="fl-sw" style="background:#64B5F6"></i><div>T=500 <small class="fl-sub">Probabilidad baja o excepcional</small></div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="zfp"><i class="fl-sw" style="background:#E65100"></i><div>Zona de flujo preferente</div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="arpsi"><i class="fl-sw line" style="border-color:#D50000"></i><div>ARPSI <small class="fl-sub">&Aacute;reas de riesgo potencial significativo</small></div></label>
+            <div class="fl-op"><span>Opacidad</span><input id="fl-opacity" type="range" min="20" max="100" value="70"></div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -230,6 +283,39 @@ const CATASTRO_WMS_GFI = "https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWM
 pnoa.addTo(map);
 redHidro.addTo(map);
 L.control.layers({"PNOA":pnoa,"IGN Base":ignBase,"OpenStreetMap":osm},{"Red hidrográfica":redHidro,"Parcelas catastrales":catastroWmsLayer}).addTo(map);
+
+// --- Capas de inundación (WMS del MITECO, estilo propio vía SLD) ---
+const MITECO_WMS = "https://gis.miteco.gob.es/geoserver/wms?";
+function floodSld(layer, sym){
+    return `<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld"><NamedLayer><Name>${layer}</Name><UserStyle><FeatureTypeStyle><Rule>${sym}</Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>`;
+}
+const sldPoly=(c,o)=>`<PolygonSymbolizer><Fill><CssParameter name="fill">${c}</CssParameter><CssParameter name="fill-opacity">${o}</CssParameter></Fill><Stroke><CssParameter name="stroke">${c}</CssParameter><CssParameter name="stroke-width">0.6</CssParameter></Stroke></PolygonSymbolizer>`;
+const sldLine=(c,w)=>`<LineSymbolizer><Stroke><CssParameter name="stroke">${c}</CssParameter><CssParameter name="stroke-width">${w}</CssParameter></Stroke></LineSymbolizer>`;
+function floodWms(layer, sym, z){
+    return L.tileLayer.wms(MITECO_WMS, { layers:layer, styles:"", format:"image/png", transparent:true, version:"1.1.1", sld_body:floodSld(layer,sym), attribution:"&copy; MITECO (SNCZI)", zIndex:z, opacity:0.7 });
+}
+const floodOverlays = {
+    t500:  floodWms("agua:Zi_laminas_q500",  sldPoly("#64B5F6",0.9), 410),
+    t100:  floodWms("agua:Zi_laminas_q100",  sldPoly("#1976D2",0.9), 420),
+    t10:   floodWms("agua:Zi_laminas_q10",   sldPoly("#0D47A1",1),   430),
+    zfp:   floodWms("agua:ZI_Laminas_ZFP",   sldPoly("#E65100",0.8), 440),
+    arpsi: floodWms("agua:Zi_arpsi",         sldLine("#D50000",3),   450)
+};
+function floodOpacity(){ return document.getElementById("fl-opacity").value/100; }
+document.querySelectorAll("#flood-win input[data-fl]").forEach(cb=>{
+    cb.addEventListener("change",()=>{
+        const l=floodOverlays[cb.dataset.fl];
+        if(cb.checked){ l.setOpacity(floodOpacity()); l.addTo(map); } else map.removeLayer(l);
+    });
+});
+document.getElementById("fl-opacity").addEventListener("input",()=>Object.values(floodOverlays).forEach(l=>l.setOpacity(floodOpacity())));
+function floodWinMin(){
+    const w=document.getElementById("flood-win"), m=w.classList.toggle("min");
+    const b=document.getElementById("flood-win-min"); b.innerHTML=m?"&#9633;":"&minus;"; b.title=m?"Expandir":"Minimizar";
+}
+function floodWinClose(){ document.getElementById("flood-win").classList.add("hidden"); document.getElementById("flood-open").classList.remove("hidden"); }
+function floodWinOpen(){ document.getElementById("flood-open").classList.add("hidden"); document.getElementById("flood-win").classList.remove("hidden"); }
+["flood-win","flood-open"].forEach(id=>{ const e=document.getElementById(id); L.DomEvent.disableClickPropagation(e); L.DomEvent.disableScrollPropagation(e); });
 
 let marker=null, floodLayers=[], parcelLayer=null, lastFloodGeoJSON=null, lastParcelGeoJSON=null;
 let catastroClickMode=false;
