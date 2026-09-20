@@ -117,7 +117,7 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     color:#e0e0e0; font-size:15px; line-height:1; cursor:pointer;
 }
 #flood-win-head button:hover { background:rgba(255,255,255,.15); }
-#flood-win-body { padding:8px 10px; max-height:60vh; overflow-y:auto; }
+#flood-win-body { padding:8px 10px; max-height:calc(100vh - 90px); overflow-y:auto; }
 #flood-win.min #flood-win-body { display:none; }
 .fl-row { display:flex; align-items:center; gap:7px; margin:0 0 6px; cursor:pointer; color:#e0e0e0; font-size:12px; }
 .fl-row input { width:auto; margin:0; padding:0; }
@@ -126,6 +126,13 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
 .fl-sub { color:#8892b0; font-size:10px; display:block; }
 .fl-op { display:flex; align-items:center; gap:8px; margin-top:8px; padding-top:8px; border-top:1px solid #0f3460; color:#8892b0; }
 .fl-op input { padding:0; }
+.fl-h { color:#00d4ff; font-size:10px; text-transform:uppercase; letter-spacing:.5px; margin:10px 0 6px; padding-top:8px; border-top:1px solid #0f3460; }
+.fl-h:first-child { margin-top:0; padding-top:0; border-top:none; }
+.fl-legend { display:none; margin:2px 0 8px; padding:6px 8px; background:#1a1a2e; border:1px solid #0f3460; border-radius:4px; }
+.fl-legend b { display:block; color:#8892b0; font-size:10px; margin-bottom:4px; font-weight:600; }
+.fl-ramp { display:grid; grid-template-columns:1fr 1fr; gap:3px 8px; font-size:10px; color:#e0e0e0; }
+.fl-ramp span { display:flex; align-items:center; gap:5px; white-space:nowrap; }
+.fl-ramp i { width:14px; height:10px; border-radius:2px; flex-shrink:0; border:1px solid rgba(255,255,255,.3); }
 #flood-open {
     position:absolute; top:10px; left:56px; z-index:1000; padding:7px 11px;
     background:#0f3460; color:#00d4ff; border:1px solid #00d4ff; border-radius:5px;
@@ -149,7 +156,7 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     .info-click { font-size:11px; top:6px; }
     #flood-win { width:210px; top:6px; left:50px; }
     #flood-open { top:6px; left:50px; }
-    #flood-win-body { max-height:40vh; }
+    #flood-win-body { max-height:calc(40vh - 60px); }
     #result-panel h3 { padding:6px 10px 2px; font-size:10px; }
     #result-box { font-size:11px; margin:0 10px 6px; padding:8px; }
     .tab-content { padding:8px 10px; }
@@ -228,11 +235,20 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
             <button title="Cerrar" onclick="floodWinClose()">&times;</button>
         </div>
         <div id="flood-win-body">
+            <div class="fl-h">Zonas inundables</div>
             <label class="fl-row"><input type="checkbox" data-fl="t10"><i class="fl-sw" style="background:#0D47A1"></i><div>T=10 <small class="fl-sub">Alta probabilidad</small></div></label>
             <label class="fl-row"><input type="checkbox" data-fl="t100"><i class="fl-sw" style="background:#1976D2"></i><div>T=100 <small class="fl-sub">Probabilidad media u ocasional</small></div></label>
             <label class="fl-row"><input type="checkbox" data-fl="t500"><i class="fl-sw" style="background:#64B5F6"></i><div>T=500 <small class="fl-sub">Probabilidad baja o excepcional</small></div></label>
             <label class="fl-row"><input type="checkbox" data-fl="zfp"><i class="fl-sw" style="background:#E65100"></i><div>Zona de flujo preferente</div></label>
             <label class="fl-row"><input type="checkbox" data-fl="arpsi"><i class="fl-sw line" style="border-color:#D50000"></i><div>ARPSI <small class="fl-sub">&Aacute;reas de riesgo potencial significativo</small></div></label>
+            <div class="fl-h">Peligrosidad (calado en m)</div>
+            <label class="fl-row"><input type="checkbox" data-fl="p10"><div>Fluvial T=10</div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="p100"><div>Fluvial T=100</div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="p500"><div>Fluvial T=500</div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="m100"><div>Marina T=100 <small class="fl-sub" style="display:inline"> costa</small></div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="m500"><div>Marina T=500 <small class="fl-sub" style="display:inline"> costa</small></div></label>
+            <div class="fl-legend" id="fl-leg-fluvial"><b>Calado fluvial</b><div class="fl-ramp"><span><i style="background:#1FDDFF"></i>&lt; 0,2 m</span><span><i style="background:#1DC0F8"></i>0,2 &ndash; 0,4</span><span><i style="background:#179BF0"></i>0,4 &ndash; 0,7</span><span><i style="background:#1173E9"></i>0,7 &ndash; 1,0</span><span><i style="background:#0B4CE1"></i>1,0 &ndash; 1,5</span><span><i style="background:#0526DA"></i>1,5 &ndash; 2,0</span><span><i style="background:#0000B3"></i>&gt; 2,0 m</span></div></div>
+            <div class="fl-legend" id="fl-leg-marina"><b>Calado marino</b><div class="fl-ramp"><span><i style="background:#D9FCFF"></i>0 m</span><span><i style="background:#1FDDFF"></i>0 &ndash; 0,2</span><span><i style="background:#1DC0F8"></i>0,2 &ndash; 0,4</span><span><i style="background:#179BF0"></i>0,4 &ndash; 0,7</span><span><i style="background:#1173E9"></i>0,7 &ndash; 1,0</span><span><i style="background:#0B4CE1"></i>1,0 &ndash; 1,5</span><span><i style="background:#0526DA"></i>1,5 &ndash; 2,0</span><span><i style="background:#0000B3"></i>&gt; 2,0 m</span></div></div>
             <div class="fl-op"><span>Opacidad</span><input id="fl-opacity" type="range" min="20" max="100" value="70"></div>
         </div>
     </div>
@@ -294,18 +310,33 @@ const sldLine=(c,w)=>`<LineSymbolizer><Stroke><CssParameter name="stroke">${c}</
 function floodWms(layer, sym, z){
     return L.tileLayer.wms(MITECO_WMS, { layers:layer, styles:"", format:"image/png", transparent:true, version:"1.1.1", sld_body:floodSld(layer,sym), attribution:"&copy; MITECO (SNCZI)", zIndex:z, opacity:0.7 });
 }
+function depthWms(layer, z){
+    return L.tileLayer.wms(FLOOD_DEPTH_WMS+"?", { layers:layer, styles:"", format:"image/png", transparent:true, version:"1.1.1", attribution:"&copy; MITECO / IGN", zIndex:z, opacity:0.7 });
+}
 const floodOverlays = {
     t500:  floodWms("agua:Zi_laminas_q500",  sldPoly("#64B5F6",0.9), 410),
     t100:  floodWms("agua:Zi_laminas_q100",  sldPoly("#1976D2",0.9), 420),
     t10:   floodWms("agua:Zi_laminas_q10",   sldPoly("#0D47A1",1),   430),
     zfp:   floodWms("agua:ZI_Laminas_ZFP",   sldPoly("#E65100",0.8), 440),
-    arpsi: floodWms("agua:Zi_arpsi",         sldLine("#D50000",3),   450)
+    arpsi: floodWms("agua:Zi_arpsi",         sldLine("#D50000",3),   450),
+    // Mapas de peligrosidad (rásters de calado, estilo oficial del IGN/MITECO), por debajo de los vectoriales
+    p500: depthWms("NZ.Flood.FluvialT500", 400),
+    p100: depthWms("NZ.Flood.FluvialT100", 401),
+    p10:  depthWms("NZ.Flood.FluvialT10",  402),
+    m500: depthWms("NZ.Flood.MarinaT500",  403),
+    m100: depthWms("NZ.Flood.MarinaT100",  404)
 };
+function updateFloodLegends(){
+    const on=k=>map.hasLayer(floodOverlays[k]);
+    document.getElementById("fl-leg-fluvial").style.display=(on("p10")||on("p100")||on("p500"))?"block":"none";
+    document.getElementById("fl-leg-marina").style.display=(on("m100")||on("m500"))?"block":"none";
+}
 function floodOpacity(){ return document.getElementById("fl-opacity").value/100; }
 document.querySelectorAll("#flood-win input[data-fl]").forEach(cb=>{
     cb.addEventListener("change",()=>{
         const l=floodOverlays[cb.dataset.fl];
         if(cb.checked){ l.setOpacity(floodOpacity()); l.addTo(map); } else map.removeLayer(l);
+        updateFloodLegends();
     });
 });
 document.getElementById("fl-opacity").addEventListener("input",()=>Object.values(floodOverlays).forEach(l=>l.setOpacity(floodOpacity())));
