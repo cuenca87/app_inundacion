@@ -219,6 +219,12 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     </div>
 
     <div id="sec-layers" class="sec">
+            <div class="fl-h">Mapa de fondo</div>
+            <div class="fl-op" style="margin:0 0 4px;padding:0;border:none"><span>Opacidad</span><input id="base-opacity" type="range" min="0" max="100" value="100"></div>
+            <div class="fl-h">Dominio p&uacute;blico hidr&aacute;ulico</div>
+            <label class="fl-row"><input type="checkbox" data-fl="dph"><i class="fl-sw" style="background:#00B386"></i><div>DPH cartogr&aacute;fico <small class="fl-sub">Cauces, servidumbre y polic&iacute;a (estimado)</small></div></label>
+            <label class="fl-row"><input type="checkbox" data-fl="dphd"><i class="fl-sw" style="background:#1565C0"></i><div>DPH deslindado <small class="fl-sub">Cauces deslindados, servidumbre y polic&iacute;a</small></div></label>
+            <div class="fl-legend" id="fl-leg-dph"><img id="fl-leg-dph-img" alt="Leyenda DPH cartogr&aacute;fico" style="display:none;max-width:100%"><img id="fl-leg-dphd-img" alt="Leyenda DPH deslindado" style="display:none;max-width:100%"></div>
             <div class="fl-h">Zonas inundables</div>
             <label class="fl-row"><input type="checkbox" data-fl="t10"><i class="fl-sw" style="background:#0D47A1"></i><div>T=10 <small class="fl-sub">Alta probabilidad</small></div></label>
             <label class="fl-row"><input type="checkbox" data-fl="t100"><i class="fl-sw" style="background:#1976D2"></i><div>T=100 <small class="fl-sub">Probabilidad media u ocasional</small></div></label>
@@ -233,7 +239,7 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
             <label class="fl-row"><input type="checkbox" data-fl="m500"><div>Marina T=500 <small class="fl-sub" style="display:inline"> costa</small></div></label>
             <div class="fl-legend" id="fl-leg-fluvial"><b>Calado fluvial</b><div class="fl-ramp"><span><i style="background:#1FDDFF"></i>&lt; 0,2 m</span><span><i style="background:#1DC0F8"></i>0,2 &ndash; 0,4</span><span><i style="background:#179BF0"></i>0,4 &ndash; 0,7</span><span><i style="background:#1173E9"></i>0,7 &ndash; 1,0</span><span><i style="background:#0B4CE1"></i>1,0 &ndash; 1,5</span><span><i style="background:#0526DA"></i>1,5 &ndash; 2,0</span><span><i style="background:#0000B3"></i>&gt; 2,0 m</span></div></div>
             <div class="fl-legend" id="fl-leg-marina"><b>Calado marino</b><div class="fl-ramp"><span><i style="background:#D9FCFF"></i>0 m</span><span><i style="background:#1FDDFF"></i>0 &ndash; 0,2</span><span><i style="background:#1DC0F8"></i>0,2 &ndash; 0,4</span><span><i style="background:#179BF0"></i>0,4 &ndash; 0,7</span><span><i style="background:#1173E9"></i>0,7 &ndash; 1,0</span><span><i style="background:#0B4CE1"></i>1,0 &ndash; 1,5</span><span><i style="background:#0526DA"></i>1,5 &ndash; 2,0</span><span><i style="background:#0000B3"></i>&gt; 2,0 m</span></div></div>
-            <div class="fl-op"><span>Opacidad</span><input id="fl-opacity" type="range" min="20" max="100" value="70"></div>
+            <div class="fl-op"><span>Opacidad capas</span><input id="fl-opacity" type="range" min="20" max="100" value="70"></div>
     </div>
 </div>
 
@@ -308,6 +314,9 @@ const floodOverlays = {
     zfp:   floodWms("agua:ZI_Laminas_ZFP",   sldPoly("#E65100",0.8), 440),
     arpsi: floodWms("agua:Zi_arpsi",         sldLine("#D50000",3),   450),
     // Mapas de peligrosidad (rásters de calado, estilo oficial del IGN/MITECO), por debajo de los vectoriales
+    // Dominio público hidráulico (estilo oficial por defecto: cauce + servidumbre + policía)
+    dph:  L.tileLayer.wms(MITECO_WMS, { layers:"agua:DPH_Estimado",   styles:"", format:"image/png", transparent:true, version:"1.1.1", attribution:"&copy; MITECO (SNCZI)", zIndex:415, opacity:0.7 }),
+    dphd: L.tileLayer.wms(MITECO_WMS, { layers:"agua:DPH_Deslindado", styles:"", format:"image/png", transparent:true, version:"1.1.1", attribution:"&copy; MITECO (SNCZI)", zIndex:416, opacity:0.7 }),
     p500: depthWms("NZ.Flood.FluvialT500", 400),
     p100: depthWms("NZ.Flood.FluvialT100", 401),
     p10:  depthWms("NZ.Flood.FluvialT10",  402),
@@ -318,6 +327,9 @@ function updateFloodLegends(){
     const on=k=>map.hasLayer(floodOverlays[k]);
     document.getElementById("fl-leg-fluvial").style.display=(on("p10")||on("p100")||on("p500"))?"block":"none";
     document.getElementById("fl-leg-marina").style.display=(on("m100")||on("m500"))?"block":"none";
+    const legImg=(id,k,layer)=>{ const i=document.getElementById(id); if(on(k)&&!i.src) i.src=MITECO_WMS+"service=WMS&version=1.1.1&request=GetLegendGraphic&format=image/png&layer="+layer; i.style.display=on(k)?"block":"none"; };
+    legImg("fl-leg-dph-img","dph","agua:DPH_Estimado"); legImg("fl-leg-dphd-img","dphd","agua:DPH_Deslindado");
+    document.getElementById("fl-leg-dph").style.display=(on("dph")||on("dphd"))?"block":"none";
 }
 function floodOpacity(){ return document.getElementById("fl-opacity").value/100; }
 document.querySelectorAll("#sec-layers input[data-fl]").forEach(cb=>{
@@ -328,6 +340,7 @@ document.querySelectorAll("#sec-layers input[data-fl]").forEach(cb=>{
     });
 });
 document.getElementById("fl-opacity").addEventListener("input",()=>Object.values(floodOverlays).forEach(l=>l.setOpacity(floodOpacity())));
+document.getElementById("base-opacity").addEventListener("input",e=>[pnoa,ignBase,osm].forEach(l=>l.setOpacity(e.target.value/100)));
 function switchSection(n){
     ["query","layers"].forEach(k=>{
         document.getElementById("sec-"+k).classList.toggle("active",k===n);
