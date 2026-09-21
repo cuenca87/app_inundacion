@@ -100,26 +100,14 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     font-size:12px; pointer-events:none;
 }
 
-/* ---------- Ventana de capas de inundación ---------- */
-#flood-win {
-    position:absolute; top:10px; left:56px; z-index:1000; width:250px;
-    background:rgba(22,33,62,.95); border:1px solid #0f3460; border-radius:6px;
-    box-shadow:0 2px 10px rgba(0,0,0,.5); font-size:12px;
-}
-#flood-win.hidden, #flood-open.hidden { display:none; }
-#flood-win-head {
-    display:flex; align-items:center; gap:4px; padding:6px 8px; cursor:default;
-    background:#0f3460; border-radius:6px 6px 0 0; color:#00d4ff; font-weight:600;
-}
-#flood-win.min #flood-win-head { border-radius:6px; }
-#flood-win-head span { flex:1; }
-#flood-win-head button {
-    width:22px; height:22px; border:none; border-radius:3px; background:transparent;
-    color:#e0e0e0; font-size:15px; line-height:1; cursor:pointer;
-}
-#flood-win-head button:hover { background:rgba(255,255,255,.15); }
-#flood-win-body { padding:8px 10px; max-height:calc(100vh - 90px); overflow-y:auto; }
-#flood-win.min #flood-win-body { display:none; }
+/* ---------- Secciones (Consulta / Capas) ---------- */
+.sec-bar { display:flex; flex-shrink:0; background:#0b1428; border-bottom:2px solid #0f3460; }
+.sec-btn { flex:1; padding:9px 6px; border:none; background:transparent; color:#8892b0; font-size:13px; font-weight:600; cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px; }
+.sec-btn.active { color:#00d4ff; border-bottom-color:#00d4ff; background:#16213e; }
+.sec { display:none; flex:1; flex-direction:column; min-height:0; overflow-y:auto; }
+.sec.active { display:flex; }
+#sec-layers { padding:10px 14px; display:block; }
+#sec-layers:not(.active) { display:none; }
 .fl-row { display:flex; align-items:center; gap:7px; margin:0 0 6px; cursor:pointer; color:#e0e0e0; font-size:12px; }
 .fl-row input { width:auto; margin:0; padding:0; }
 .fl-sw { width:18px; height:12px; border-radius:2px; flex-shrink:0; border:1px solid rgba(255,255,255,.35); }
@@ -134,11 +122,6 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
 .fl-ramp { display:grid; grid-template-columns:1fr 1fr; gap:3px 8px; font-size:10px; color:#e0e0e0; }
 .fl-ramp span { display:flex; align-items:center; gap:5px; white-space:nowrap; }
 .fl-ramp i { width:14px; height:10px; border-radius:2px; flex-shrink:0; border:1px solid rgba(255,255,255,.3); }
-#flood-open {
-    position:absolute; top:10px; left:56px; z-index:1000; padding:7px 11px;
-    background:#0f3460; color:#00d4ff; border:1px solid #00d4ff; border-radius:5px;
-    font-size:12px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.5);
-}
 
 /* ---------- MOBILE ---------- */
 @media (max-width: 768px) {
@@ -151,8 +134,9 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     }
     #map { order:1; flex:1; width:100%; min-height:120px; }
     #sb-toggle { display:block; }
+    body.sb-collapsed #sec-query { display:flex; }
     body.sb-collapsed #sidebar { height:auto; min-height:0; max-height:30vh; }
-    body.sb-collapsed .tab-bar, body.sb-collapsed .tab-content, body.sb-collapsed .download-bar, body.sb-collapsed #result-panel h3 { display:none; }
+    body.sb-collapsed .sec-bar, body.sb-collapsed #sec-layers, body.sb-collapsed .tab-bar, body.sb-collapsed .tab-content, body.sb-collapsed .download-bar, body.sb-collapsed #result-panel h3 { display:none; }
     body.sb-collapsed #result-panel { border-top:none; padding-top:6px; }
     body.sb-collapsed #result-box { max-height:calc(30vh - 60px); }
     #sidebar-header img { height:28px; }
@@ -160,11 +144,6 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     #sidebar-header { padding:6px 10px; gap:8px; }
     .tab-btn { font-size:10px; padding:7px 2px; }
     .info-click { font-size:11px; top:6px; }
-    #flood-win { width:210px; top:6px; left:50px; }
-    #flood-win.min { width:auto; }
-    #flood-win-head span { white-space:nowrap; }
-    #flood-open { top:6px; left:50px; }
-    #flood-win-body { max-height:calc(60vh - 60px); }
     #result-panel h3 { padding:6px 10px 2px; font-size:10px; }
     #result-box { font-size:11px; margin:0 10px 6px; padding:8px; }
     .tab-content { padding:8px 10px; }
@@ -182,6 +161,12 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
         <button id="sb-toggle" title="Plegar/desplegar panel" onclick="sidebarToggle()">&#9660;</button>
     </div>
 
+    <div class="sec-bar">
+        <button class="sec-btn active" id="secbtn-query" onclick="switchSection('query')">&#128269; Consulta</button>
+        <button class="sec-btn" id="secbtn-layers" onclick="switchSection('layers')">&#128167; Capas</button>
+    </div>
+
+    <div id="sec-query" class="sec active">
     <div class="tab-bar">
         <button class="tab-btn active" onclick="switchTab('coords')">Coordenadas</button>
         <button class="tab-btn" onclick="switchTab('geolocate')">Ubicaci&oacute;n</button>
@@ -231,19 +216,9 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
         <button class="dl-btn" id="dl-zi" disabled onclick="downloadZI()">Descargar Z.I.</button>
         <button class="dl-btn" id="dl-parcel" disabled onclick="downloadParcel()">Descargar Parcela</button>
     </div>
-</div>
+    </div>
 
-<div id="map">
-    <div class="info-click" id="info-click">Click en el mapa para consultar un punto</div>
-
-    <button id="flood-open" class="hidden" onclick="floodWinOpen()">&#128167; Capas de inundaci&oacute;n</button>
-    <div id="flood-win">
-        <div id="flood-win-head">
-            <span>&#128167; Capas de inundaci&oacute;n</span>
-            <button id="flood-win-min" title="Minimizar" onclick="floodWinMin()">&minus;</button>
-            <button title="Cerrar" onclick="floodWinClose()">&times;</button>
-        </div>
-        <div id="flood-win-body">
+    <div id="sec-layers" class="sec">
             <div class="fl-h">Zonas inundables</div>
             <label class="fl-row"><input type="checkbox" data-fl="t10"><i class="fl-sw" style="background:#0D47A1"></i><div>T=10 <small class="fl-sub">Alta probabilidad</small></div></label>
             <label class="fl-row"><input type="checkbox" data-fl="t100"><i class="fl-sw" style="background:#1976D2"></i><div>T=100 <small class="fl-sub">Probabilidad media u ocasional</small></div></label>
@@ -259,8 +234,12 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
             <div class="fl-legend" id="fl-leg-fluvial"><b>Calado fluvial</b><div class="fl-ramp"><span><i style="background:#1FDDFF"></i>&lt; 0,2 m</span><span><i style="background:#1DC0F8"></i>0,2 &ndash; 0,4</span><span><i style="background:#179BF0"></i>0,4 &ndash; 0,7</span><span><i style="background:#1173E9"></i>0,7 &ndash; 1,0</span><span><i style="background:#0B4CE1"></i>1,0 &ndash; 1,5</span><span><i style="background:#0526DA"></i>1,5 &ndash; 2,0</span><span><i style="background:#0000B3"></i>&gt; 2,0 m</span></div></div>
             <div class="fl-legend" id="fl-leg-marina"><b>Calado marino</b><div class="fl-ramp"><span><i style="background:#D9FCFF"></i>0 m</span><span><i style="background:#1FDDFF"></i>0 &ndash; 0,2</span><span><i style="background:#1DC0F8"></i>0,2 &ndash; 0,4</span><span><i style="background:#179BF0"></i>0,4 &ndash; 0,7</span><span><i style="background:#1173E9"></i>0,7 &ndash; 1,0</span><span><i style="background:#0B4CE1"></i>1,0 &ndash; 1,5</span><span><i style="background:#0526DA"></i>1,5 &ndash; 2,0</span><span><i style="background:#0000B3"></i>&gt; 2,0 m</span></div></div>
             <div class="fl-op"><span>Opacidad</span><input id="fl-opacity" type="range" min="20" max="100" value="70"></div>
-        </div>
     </div>
+</div>
+
+<div id="map">
+    <div class="info-click" id="info-click">Click en el mapa para consultar un punto</div>
+
 </div>
 
 <script>
@@ -341,7 +320,7 @@ function updateFloodLegends(){
     document.getElementById("fl-leg-marina").style.display=(on("m100")||on("m500"))?"block":"none";
 }
 function floodOpacity(){ return document.getElementById("fl-opacity").value/100; }
-document.querySelectorAll("#flood-win input[data-fl]").forEach(cb=>{
+document.querySelectorAll("#sec-layers input[data-fl]").forEach(cb=>{
     cb.addEventListener("change",()=>{
         const l=floodOverlays[cb.dataset.fl];
         if(cb.checked){ l.setOpacity(floodOpacity()); l.addTo(map); } else map.removeLayer(l);
@@ -349,19 +328,17 @@ document.querySelectorAll("#flood-win input[data-fl]").forEach(cb=>{
     });
 });
 document.getElementById("fl-opacity").addEventListener("input",()=>Object.values(floodOverlays).forEach(l=>l.setOpacity(floodOpacity())));
-function floodWinMin(){
-    const w=document.getElementById("flood-win"), m=w.classList.toggle("min");
-    const b=document.getElementById("flood-win-min"); b.innerHTML=m?"&#9633;":"&minus;"; b.title=m?"Expandir":"Minimizar";
+function switchSection(n){
+    ["query","layers"].forEach(k=>{
+        document.getElementById("sec-"+k).classList.toggle("active",k===n);
+        document.getElementById("secbtn-"+k).classList.toggle("active",k===n);
+    });
 }
 function sidebarToggle(){
     const c=document.body.classList.toggle("sb-collapsed");
     const b=document.getElementById("sb-toggle"); b.innerHTML=c?"&#9650;":"&#9660;";
     setTimeout(()=>map.invalidateSize(),50);
 }
-if(window.matchMedia("(max-width: 768px)").matches) floodWinMin(); // en móvil, capas plegadas por defecto
-function floodWinClose(){ document.getElementById("flood-win").classList.add("hidden"); document.getElementById("flood-open").classList.remove("hidden"); }
-function floodWinOpen(){ document.getElementById("flood-open").classList.add("hidden"); document.getElementById("flood-win").classList.remove("hidden"); }
-["flood-win","flood-open"].forEach(id=>{ const e=document.getElementById(id); L.DomEvent.disableClickPropagation(e); L.DomEvent.disableScrollPropagation(e); });
 
 let marker=null, floodLayers=[], parcelLayer=null, lastFloodGeoJSON=null, lastParcelGeoJSON=null;
 let catastroClickMode=false;

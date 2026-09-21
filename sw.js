@@ -1,4 +1,4 @@
-const CACHE_NAME = "zi-visor-v5";
+const CACHE_NAME = "zi-visor-v6";
 const ASSETS = [
   "./index.html",
   "./icon.svg",
