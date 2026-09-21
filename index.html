@@ -28,7 +28,8 @@ body { font-family: 'Segoe UI', Arial, sans-serif; display:flex; height:100vh; b
     border-bottom: 1px solid #0f3460; background: #FDD835; flex-shrink:0;
 }
 #sidebar-header img { height: 40px; }
-#sidebar-header h2 { font-size: 12px; color: #1a1a2e; line-height: 1.3; margin:0; }
+#sidebar-header h2 { font-size: 12px; color: #1a1a2e; line-height: 1.3; margin:0; flex:1; }
+#sb-toggle { display:none; width:32px; height:28px; border:1px solid #1a1a2e; border-radius:5px; background:transparent; color:#1a1a2e; font-size:16px; line-height:1; cursor:pointer; flex-shrink:0; }
 
 .tab-bar { display:flex; border-bottom:1px solid #0f3460; flex-shrink:0; flex-wrap:wrap; }
 .tab-btn {
@@ -144,19 +145,26 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     body { flex-direction:column; }
     #sidebar {
         width:100%; min-width:unset; order:2;
-        height:60vh; min-height:280px;
+        height:40vh; min-height:200px;
         border-right:none; border-top:2px solid #0f3460;
         overflow-y:auto;
     }
     #map { order:1; flex:1; width:100%; min-height:120px; }
+    #sb-toggle { display:block; }
+    body.sb-collapsed #sidebar { height:auto; min-height:0; max-height:30vh; }
+    body.sb-collapsed .tab-bar, body.sb-collapsed .tab-content, body.sb-collapsed .download-bar, body.sb-collapsed #result-panel h3 { display:none; }
+    body.sb-collapsed #result-panel { border-top:none; padding-top:6px; }
+    body.sb-collapsed #result-box { max-height:calc(30vh - 60px); }
     #sidebar-header img { height:28px; }
     #sidebar-header h2 { font-size:10px; }
     #sidebar-header { padding:6px 10px; gap:8px; }
     .tab-btn { font-size:10px; padding:7px 2px; }
     .info-click { font-size:11px; top:6px; }
     #flood-win { width:210px; top:6px; left:50px; }
+    #flood-win.min { width:auto; }
+    #flood-win-head span { white-space:nowrap; }
     #flood-open { top:6px; left:50px; }
-    #flood-win-body { max-height:calc(40vh - 60px); }
+    #flood-win-body { max-height:calc(60vh - 60px); }
     #result-panel h3 { padding:6px 10px 2px; font-size:10px; }
     #result-box { font-size:11px; margin:0 10px 6px; padding:8px; }
     .tab-content { padding:8px 10px; }
@@ -171,6 +179,7 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     <div id="sidebar-header">
         <img src="https://www.miteco.gob.es/content/experience-fragments/miteco/language-masters/es/site/header/master-es/_jcr_content/root/header_container/logoImage.coreimg.svg/1764659487766/header-logo.svg" alt="MITECO">
         <h2>Visor de Zonas Inundables<br><small style="font-weight:400;color:#333;">T=10, T=100, T=500</small></h2>
+        <button id="sb-toggle" title="Plegar/desplegar panel" onclick="sidebarToggle()">&#9660;</button>
     </div>
 
     <div class="tab-bar">
@@ -344,6 +353,12 @@ function floodWinMin(){
     const w=document.getElementById("flood-win"), m=w.classList.toggle("min");
     const b=document.getElementById("flood-win-min"); b.innerHTML=m?"&#9633;":"&minus;"; b.title=m?"Expandir":"Minimizar";
 }
+function sidebarToggle(){
+    const c=document.body.classList.toggle("sb-collapsed");
+    const b=document.getElementById("sb-toggle"); b.innerHTML=c?"&#9650;":"&#9660;";
+    setTimeout(()=>map.invalidateSize(),50);
+}
+if(window.matchMedia("(max-width: 768px)").matches) floodWinMin(); // en móvil, capas plegadas por defecto
 function floodWinClose(){ document.getElementById("flood-win").classList.add("hidden"); document.getElementById("flood-open").classList.remove("hidden"); }
 function floodWinOpen(){ document.getElementById("flood-open").classList.add("hidden"); document.getElementById("flood-win").classList.remove("hidden"); }
 ["flood-win","flood-open"].forEach(id=>{ const e=document.getElementById(id); L.DomEvent.disableClickPropagation(e); L.DomEvent.disableScrollPropagation(e); });
