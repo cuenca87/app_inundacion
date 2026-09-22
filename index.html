@@ -60,7 +60,7 @@ button.action {
 button.action:disabled { opacity:.4; cursor:not-allowed; }
 
 #result-panel {
-    flex:1; display:flex; flex-direction:column; overflow:hidden;
+    flex:1; display:flex; flex-direction:column;
     border-top:1px solid #0f3460; min-height:0;
 }
 #result-panel h3 {
@@ -70,7 +70,7 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
 #result-box {
     margin:0 14px 8px; padding:10px; border-radius:5px; font-size:12px;
     background:#1a1a2e; border:1px solid #0f3460; flex:1; overflow-y:auto;
-    white-space:pre-wrap; line-height:1.6; min-height:0;
+    white-space:pre-wrap; line-height:1.6; min-height:80px;
 }
 .result-si { color:#ff6b6b; font-weight:700; font-size:13px; }
 .result-no { color:#51cf66; font-weight:700; font-size:13px; }
@@ -145,7 +145,7 @@ button.action:disabled { opacity:.4; cursor:not-allowed; }
     .tab-btn { font-size:10px; padding:7px 2px; }
     .info-click { font-size:11px; top:6px; }
     #result-panel h3 { padding:6px 10px 2px; font-size:10px; }
-    #result-box { font-size:11px; margin:0 10px 6px; padding:8px; }
+    #result-box { font-size:11px; margin:0 10px 6px; padding:8px; min-height:100px; }
     .tab-content { padding:8px 10px; }
     .download-bar { padding:5px 10px; }
     .dl-btn { font-size:10px; padding:6px; }
@@ -331,6 +331,66 @@ function updateFloodLegends(){
     legImg("fl-leg-dph-img","dph","agua:DPH_Estimado"); legImg("fl-leg-dphd-img","dphd","agua:DPH_Deslindado");
     document.getElementById("fl-leg-dph").style.display=(on("dph")||on("dphd"))?"block":"none";
 }
+// Metadatos de cada capa de floodOverlays para consultar su valor con GetFeatureInfo
+const FLOOD_LAYER_INFO = {
+    t500:  {label:"T=500",  url:MITECO_WMS,     layer:"agua:Zi_laminas_q500",  kind:"vector"},
+    t100:  {label:"T=100",  url:MITECO_WMS,     layer:"agua:Zi_laminas_q100",  kind:"vector"},
+    t10:   {label:"T=10",   url:MITECO_WMS,     layer:"agua:Zi_laminas_q10",   kind:"vector"},
+    zfp:   {label:"Zona de flujo preferente", url:MITECO_WMS, layer:"agua:ZI_Laminas_ZFP", kind:"vector"},
+    arpsi: {label:"ARPSI",  url:MITECO_WMS,     layer:"agua:Zi_arpsi",         kind:"vector"},
+    dph:   {label:"DPH cartográfico",  url:MITECO_WMS, layer:"agua:DPH_Estimado",   kind:"vector"},
+    dphd:  {label:"DPH deslindado",         url:MITECO_WMS, layer:"agua:DPH_Deslindado", kind:"vector"},
+    p500:  {label:"Peligrosidad fluvial T=500", url:FLOOD_DEPTH_WMS, layer:"NZ.Flood.FluvialT500", kind:"raster", unit:"m"},
+    p100:  {label:"Peligrosidad fluvial T=100", url:FLOOD_DEPTH_WMS, layer:"NZ.Flood.FluvialT100", kind:"raster", unit:"m"},
+    p10:   {label:"Peligrosidad fluvial T=10",  url:FLOOD_DEPTH_WMS, layer:"NZ.Flood.FluvialT10",  kind:"raster", unit:"m"},
+    m500:  {label:"Peligrosidad marina T=500",  url:FLOOD_DEPTH_WMS, layer:"NZ.Flood.MarinaT500",  kind:"raster", unit:"m"},
+    m100:  {label:"Peligrosidad marina T=100",  url:FLOOD_DEPTH_WMS, layer:"NZ.Flood.MarinaT100",  kind:"raster", unit:"m"}
+};
+// Consulta GetFeatureInfo de una capa concreta en un punto, devuelve un string legible
+async function queryLayerValue(lon, lat, info){
+    try{
+        const d=0.0005;
+        const params=new URLSearchParams({
+            service:"WMS", version:"1.1.1", request:"GetFeatureInfo",
+            layers:info.layer, query_layers:info.layer,
+            info_format:"application/json",
+            width:"101", height:"101",
+            bbox:`${lon-d},${lat-d},${lon+d},${lat+d}`,
+            srs:"EPSG:4326", x:"50", y:"50"
+        });
+        const sep=info.url.endsWith("?")?"":"?";
+        const resp=await fetch(`${info.url}${sep}${params}`);
+        if(!resp.ok) return "error de consulta";
+        const data=await resp.json();
+        const feats=data?.features||[];
+        if(info.kind==="raster"){
+            const val=feats[0]?.properties?.GRAY_INDEX;
+            if(val==null||val>900||val<0) return "sin dato en este punto";
+            return `${val.toFixed(2)} ${info.unit||""}`.trim();
+        }
+        if(!feats.length) return "sin dato en este punto";
+        const p=feats[0].properties||{};
+        const keys=Object.keys(p).filter(k=>p[k]!=null&&p[k]!=="").slice(0,4);
+        return keys.length ? keys.map(k=>`${k}=${p[k]}`).join(", ") : "dentro de la zona";
+    }catch(e){ return "error: "+e.message; }
+}
+// Click en el mapa estando en la seccion Capas: consulta el valor de las capas activas en ese pixel
+async function handleLayersClick(latlng){
+    if(layersClickMarker){map.removeLayer(layersClickMarker);layersClickMarker=null;}
+    const active=Object.keys(FLOOD_LAYER_INFO).filter(k=>map.hasLayer(floodOverlays[k]));
+    layersClickMarker=L.circleMarker(latlng,{radius:5,color:"#00d4ff",weight:2,fillColor:"#00d4ff",fillOpacity:0.6}).addTo(map);
+    if(!active.length){
+        layersClickMarker.bindPopup('<div style="font-size:12px">Active alguna capa para consultar su valor.</div>').openPopup();
+        return;
+    }
+    const popup=L.popup().setLatLng(latlng).setContent('<div style="font-size:12px">Consultando...</div>').openOn(map);
+    const lines=await Promise.all(active.map(async k=>{
+        const info=FLOOD_LAYER_INFO[k];
+        const val=await queryLayerValue(latlng.lng, latlng.lat, info);
+        return `<b>${info.label}:</b> ${val}`;
+    }));
+    popup.setContent(`<div style="font-size:12px;line-height:1.6;max-width:230px"><b>lon=${latlng.lng.toFixed(6)}, lat=${latlng.lat.toFixed(6)}</b><br>${lines.join("<br>")}</div>`);
+}
 function floodOpacity(){ return document.getElementById("fl-opacity").value/100; }
 document.querySelectorAll("#sec-layers input[data-fl]").forEach(cb=>{
     cb.addEventListener("change",()=>{
@@ -341,7 +401,25 @@ document.querySelectorAll("#sec-layers input[data-fl]").forEach(cb=>{
 });
 document.getElementById("fl-opacity").addEventListener("input",()=>Object.values(floodOverlays).forEach(l=>l.setOpacity(floodOpacity())));
 document.getElementById("base-opacity").addEventListener("input",e=>[pnoa,ignBase,osm].forEach(l=>l.setOpacity(e.target.value/100)));
+let currentSection="query";
+function clearViewer(){
+    // Consulta: quita marcador, zonas resultado, parcela y resetea el panel de resultado
+    clearLayers();
+    setResult('<span class="result-info">Haga click en el mapa o use el panel para consultar.</span>');
+    // Capas: desactiva todas las capas de la ventana de Capas
+    document.querySelectorAll("#sec-layers input[data-fl]").forEach(cb=>{
+        if(cb.checked){ cb.checked=false; map.removeLayer(floodOverlays[cb.dataset.fl]); }
+    });
+    updateFloodLegends();
+    // Parcelas catastrales (WMS de fondo activado en la pestaña Ref. Catastral)
+    if(map.hasLayer(catastroWmsLayer)) map.removeLayer(catastroWmsLayer);
+    if(layersClickMarker){map.removeLayer(layersClickMarker);layersClickMarker=null;}
+    map.closePopup();
+}
 function switchSection(n){
+    if(n===currentSection)return;
+    clearViewer();
+    currentSection=n;
     ["query","layers"].forEach(k=>{
         document.getElementById("sec-"+k).classList.toggle("active",k===n);
         document.getElementById("secbtn-"+k).classList.toggle("active",k===n);
@@ -354,7 +432,7 @@ function sidebarToggle(){
 }
 
 let marker=null, floodLayers=[], parcelLayer=null, lastFloodGeoJSON=null, lastParcelGeoJSON=null;
-let catastroClickMode=false;
+let catastroClickMode=false, layersClickMarker=null;
 const parcelStyle={color:"#ff1744",weight:3,fillColor:"#ff1744",fillOpacity:0.15};
 
 // --- Tabs ---
@@ -643,6 +721,10 @@ async function handleCatastroClick(latlng) {
 // --- Click on map ---
 map.on("click",e=>{
     document.getElementById("info-click").style.display="none";
+    if(currentSection==="layers"){
+        handleLayersClick(e.latlng);
+        return;
+    }
     if(catastroClickMode){
         handleCatastroClick(e.latlng);
         return;
